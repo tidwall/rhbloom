@@ -35,7 +35,7 @@ data structure. It returns false if the system is out of memory.
 Here we'll benchmark a filter with the capacity of 10,000,000 and a false positive rate of 1%. 
 
 ```c
-cc -O3 rhbloom.c test.c && ./a.out bench 10000000 0.01
+cc -O3 rhbloom.c test.c -lm && ./a.out bench 10000000 0.01
 ```
 
 ```
