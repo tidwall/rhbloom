@@ -11,6 +11,7 @@
 
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 struct rhbloom { _Alignas(16) char _[48]; };
 
