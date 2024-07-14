@@ -9,26 +9,28 @@ Basically it starts out as a hashmap and grows until it reaches a capacity that 
 ```c
 // Create a filter that has a capacity of 10 million and a false positive
 // rate of 0.1%
-struct rhbloom rhbloom;
-rhbloom_init(&rhbloom, 10000000, 0.001);
+struct rhbloom *filter = rhbloom_new(10000000, 0.001);
 
 // Add the key 12031
-rhbloom_add(&rhbloom, 12031);
+rhbloom_add(filter, 12031);
 
 // Check of the key exists
-if (rhbloom_test(&rhbloom, 12031)) {
+if (rhbloom_test(filter, 12031)) {
     // Yes, of course is does.
 }
 
-rhbloom_destroy(&rhbloom);
+rhbloom_free(filter);
 ```
 
-## Notes
+## API
 
-- The `rhbloom_init()` does not allocate memory.
-- The `rhbloom_add()` function may need to allocate memory in order to grow the
-data structure. It returns false if the system is out of memory.
-- The `rhbloom_add()` function expects that your input key is already hashed.
+```c
+rhbloom_new(size_t n, double p);              // create a new filter
+rhbloom_add(struct rhbloom*, uint64_t key);   // add a key (typically a hash)
+rhbloom_test(struct rhbloom*, uint64_t key);  // test if key probably exists
+rhbloom_free(struct rhbloom*);                // free the filter
+rhbloom_clear(struct rhbloom*);               // clear entries without freeing
+```
 
 ## Performance
 
@@ -39,10 +41,10 @@ cc -O3 rhbloom.c test.c -lm && ./a.out bench 10000000 0.01
 ```
 
 ```
-add          10,000,000 ops in 0.226 secs   22.6 ns/op    44,269,922 op/sec
-test (yes)   10,000,000 ops in 0.158 secs   15.8 ns/op    63,427,629 op/sec
-test (no)    10,000,000 ops in 0.176 secs   17.6 ns/op    56,667,497 op/sec
-Misses 29218 (0.2922% false-positive)
+add          10,000,000 ops in 0.221 secs   22.1 ns/op    45,167,118 op/sec
+test (yes)   10,000,000 ops in 0.150 secs   15.0 ns/op    66,673,778 op/sec
+test (no)    10,000,000 ops in 0.136 secs   13.6 ns/op    73,576,478 op/sec
+Misses 28943 (0.2894% false-positive)
 Memory 16.00 MB
 ```
 

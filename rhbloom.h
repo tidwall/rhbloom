@@ -13,10 +13,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-struct rhbloom { _Alignas(16) char _[48]; };
+struct rhbloom;
 
-void rhbloom_init(struct rhbloom *rhbloom, size_t n, double p);
-void rhbloom_destroy(struct rhbloom *rhbloom);
+struct rhbloom *rhbloom_new(size_t n, double p);
+struct rhbloom *rhbloom_new_with_allocator(size_t n, double p, void*(*malloc)(size_t), void(*free)(void*));
+void rhbloom_free(struct rhbloom *rhbloom);
+void rhbloom_clear(struct rhbloom *rhbloom);
 bool rhbloom_add(struct rhbloom *rhbloom, uint64_t key);
 bool rhbloom_test(struct rhbloom *rhbloom, uint64_t key);
 size_t rhbloom_memsize(struct rhbloom *rhbloom);

@@ -78,45 +78,51 @@ char *commaize(unsigned int n) {
         pops, elapsed, nsop, psec); \
 }
 
+void test_step(struct rhbloom *rhbloom, int n, double p) {
+    int nn = n+1;
+    for (int i = 0; i < nn; i++) {
+        if (!rhbloom_upgraded(rhbloom)) {
+            assert(!rhbloom_test(rhbloom, hash(i)));
+        }
+        rhbloom_add(rhbloom, hash(i));
+        if (!rhbloom_upgraded(rhbloom)) {
+            assert(rhbloom_test(rhbloom, hash(i)));
+        }
+    }
+    assert(rhbloom_upgraded(rhbloom));
+    int hits = 0;
+    for (int i = 0; i < nn; i++) {
+        if (rhbloom_test(rhbloom, hash(i))) {
+            hits++;
+        }
+    }
+    assert(hits == nn);
+    hits = 0;
+
+    for (int i = nn; i < nn*2; i++) {
+        if (rhbloom_test(rhbloom, hash(i))) {
+            hits++;
+        }
+    }
+    if ((double)hits/(double)n - p > 0.1 && n > 0) {
+        printf("n=%d p=%f hits=%d \t(%f)", 
+            n, p, hits, (double)hits/(double)n);
+        printf(" (%f)", (double)hits/(double)n - p);
+        printf("\n");
+        assert(!"bad probability");
+    }
+}
+
 void test(void) {
     for (int n = 0; n < 100000; n += 1000) {
         for (double p = 0.01; p < 0.70; p += 0.05) {
-            struct rhbloom rhbloom;
-            rhbloom_init(&rhbloom, n, p);
-            int nn = n+1;
-            for (int i = 0; i < nn; i++) {
-                if (!rhbloom_upgraded(&rhbloom)) {
-                    assert(!rhbloom_test(&rhbloom, hash(i)));
-                }
-                rhbloom_add(&rhbloom, hash(i));
-                if (!rhbloom_upgraded(&rhbloom)) {
-                    assert(rhbloom_test(&rhbloom, hash(i)));
-                }
-            }
-            assert(rhbloom_upgraded(&rhbloom));
-            int hits = 0;
-            for (int i = 0; i < nn; i++) {
-                if (rhbloom_test(&rhbloom, hash(i))) {
-                    hits++;
-                }
-            }
-            assert(hits == nn);
-            hits = 0;
-
-            for (int i = nn; i < nn*2; i++) {
-                if (rhbloom_test(&rhbloom, hash(i))) {
-                    hits++;
-                }
-            }
-
-            if ((double)hits/(double)n - p > 0.1 && n > 0) {
-                printf("n=%d p=%f hits=%d \t(%f)", 
-                    n, p, hits, (double)hits/(double)n);
-                printf(" (%f)", (double)hits/(double)n - p);
-                printf("\n");
-                assert(!"bad probability");
-            }
-            rhbloom_destroy(&rhbloom);
+            struct rhbloom *rhbloom = rhbloom_new(n, p);
+            assert(rhbloom);
+            test_step(rhbloom, n, p);
+            // test after clear
+            rhbloom_clear(rhbloom); 
+            test_step(rhbloom, n, p);
+            rhbloom_free(rhbloom);
         }
     }
     printf("PASSED\n");
@@ -135,47 +141,59 @@ void bench(int argc, char *argv[]) {
         P = atof(argv[3]);
     }
 
-    struct rhbloom rhbloom;
-    
-    rhbloom_init(&rhbloom, N, P);
+    uint64_t *hashes = malloc(N*8*2);
+    assert(hashes);
+    for (int i = 0; i < N*2; i++) {
+        hashes[i] = hash(i);
+    }
+
+    struct rhbloom *rhbloom = rhbloom_new(N, P);
+    assert(rhbloom);
 // exit(1);
     double start;
 
-    printf("add          ");
-    start = now();
-    for (int i = 0; i < N; i++) {
-        // printf("insert %d (%llu)\n", i, hash(i));
-        rhbloom_add(&rhbloom, hash(i));
-    }
-    bench_print(N, start, now());
-
-    // rhbloom_print(rhbloom);
-
-
-
-    printf("test (yes)   ");
-    start = now();
-    for (int i = 0; i < N; i++) {
-        // printf("contains %d (%llu)\n", i, hash(i));
-        assert(rhbloom_test(&rhbloom, hash(i)));
-    }
-    bench_print(N, start, now());
-
-    printf("test (no)    ");
     size_t misses = 0;
-    start = now();
-    for (int i = N; i < N*2; i++) {
-        misses += rhbloom_test(&rhbloom, hash(i));
+    for (int j = 0; j < 2; j++) {
+        if (j > 0) {
+            printf("-- clear --\n");
+            rhbloom_clear(rhbloom);
+        }
+        printf("add          ");
+        start = now();
+        for (int i = 0; i < N; i++) {
+            // printf("insert %d (%llu)\n", i, hash(i));
+            rhbloom_add(rhbloom, hashes[i]);
+        }
+        bench_print(N, start, now());
+
+        // rhbloom_print(rhbloom);
+
+        printf("test (yes)   ");
+        start = now();
+        for (int i = 0; i < N; i++) {
+            // printf("contains %d (%llu)\n", i, hash(i));
+            assert(rhbloom_test(rhbloom, hashes[i]));
+        }
+        bench_print(N, start, now());
+
+
+        printf("test (no)    ");
+        misses = 0;
+        start = now();
+        for (int i = N; i < N*2; i++) {
+            misses += rhbloom_test(rhbloom, hashes[i]);
+        }
+        bench_print(N, start, now());
+
     }
-    bench_print(N, start, now());
+
 
     printf("Misses %zu (%0.4f%% false-positive)\n", misses, misses / (double)N * 100);
+    printf("Memory %.2f MB\n", rhbloom_memsize(rhbloom)/1024.0/1024.0);
 
-    printf("Memory %.2f MB\n", rhbloom_memsize(&rhbloom)/1024.0/1024.0);
-
-
+    rhbloom_free(rhbloom);
+    free(hashes);
 }
-
 
 int main(int argc, char *argv[]) {
     if (argc > 1 && strcmp(argv[1], "bench") == 0) {
